@@ -10,6 +10,7 @@ Libraries used included:
 * tidyverse
 * scales
 * ggthemes
+* here
 * ggtext
 * extrafont
 * purrr
