@@ -3,6 +3,7 @@ library(ggplot2)
 library(forcats)
 library(scales)
 library(ggthemes)
+library(purrr)
 library(ggtext)
 library(extrafont)
 library(glue)
@@ -35,63 +36,86 @@ pyramid <- pyramid %>%
 
 age_adjust <- c("75-79","80-84","85-89","90-94","95-99","100+")
 
-pyramid <- pyramid %>% mutate(dodge = case_when(
-  !(Age %in% age_adjust) & gender == "F" ~ -value/2-100000,
-  !(Age %in% age_adjust) & gender == "M" ~ value/2+100000,
-  Age %in% age_adjust & gender == "F" ~ -value -900000,
-  Age %in% age_adjust & gender == "M" ~ value + 900000))
+pyramid <- pyramid %>% mutate(perc_dodge = case_when(
+  !(Age %in% age_adjust) & gender == "F" ~ -percent/2+.2,
+  !(Age %in% age_adjust) & gender == "M" ~ percent/2+.2,
+  Age %in% age_adjust & gender == "F" ~ -percent -.5,
+  Age %in% age_adjust & gender == "M" ~ percent + .5))
 
-abs_num <- function(x) { 
-  return(sprintf("%d",abs(-x)))
-}
+pyramid <- pyramid %>% 
+  group_by(name, Age) %>% 
+  mutate(surplus = abs(diff(percent)))
+
+pyramid <- pyramid %>% 
+  group_by(name,Age) %>%
+  mutate(ranks = order(order(percent,decreasing=T))) %>% 
+  mutate(surplus = ifelse(ranks == 1, surplus, 0))
+
+
+abs_perc <- function(x) { 
+  return(paste0(abs(x),"%"))
+  }
 
 `%notin%` <- Negate("%in%")  
 
 male.col <- "#b0e0e6"
 fm.col <- "#fc8eac"
+male.surp.col <- "#5c9499"
+fm.surp.col <- "#ad87a8"
 
 pyr <- ggplot(pyramid, aes(x = Age)) +
   geom_linerange(
     data = pyramid[pyramid$gender == "M",],
-    aes(ymin = 0, ymax = value, color = male.col),
+    aes(ymin = 0, ymax = percent, color = "Male"),
     size = 10) +
   geom_linerange(
     data = pyramid[pyramid$gender == "F", ],
-    aes(ymin = 0, ymax = -value, color = fm.col),
+    aes(ymin = 0, ymax = -percent, color = "Female"),
     size = 10) +
-  facet_wrap(~facet_lbl, ncol = 2, scales = "free_x") +
-  scale_color_manual(labels = c("Male","Female"), name="Sex", values = c(male.col, fm.col)) +
-  scale_y_continuous(label = abs_num) +
+  geom_linerange(
+    data = pyramid[pyramid$gender == "F",],
+    aes(ymin = -percent+surplus, ymax = -percent, color = "Female Surplus"),
+    size = 10) +
+  geom_linerange(
+    data = pyramid[pyramid$gender == "M",],
+    aes(ymin = percent - surplus, ymax = percent, color = "Male Surplus"),
+    size = 10) +
+  facet_wrap(~facet_lbl, ncol = 2, scales = "fixed") +
+  scale_y_continuous(breaks = c(-3,-2,-1,0,1,2,3), labels = abs_perc) +
+  scale_color_manual(labels = c("Male","Female", "Male Surplus", "Female Surplus"),
+                     breaks = c("Male","Female","Male Surplus","Female Surplus"), 
+                     name="Sex", values = c(male.col, fm.col, male.surp.col,fm.surp.col)) +
   geom_hline(yintercept = 0, color = "#696969", size = .5) +
   labs(title = "Russia vs. U.S. Population Pyramid, 2020", caption="<i style='color:#0F5257'>Source:</i> populationpyramid.net. Viz by @nmill092.",
-       y = "Population (2020)") +
+       y = "Share of Total 2020 Population, %") +
   geom_text(aes(label = paste0(percent,"%"), 
-                y = dodge), 
+                y = perc_dodge), 
             family = "Roboto Mono", size=5) + 
   theme(
     panel.grid = element_blank(),
     panel.grid.major.y = element_line(size = .075, color = "black"),
     axis.ticks.y = element_blank(),
     axis.text.x = element_markdown(family = "Roboto Mono", size = 10, face="italic"),
-    axis.text.y = element_text(family = "Roboto Light", size = 13),
-    plot.background = element_rect(fill="#f1f1f1"),
+    axis.text.y = element_text(family = "Roboto Light", size = 14),
+    plot.background = element_rect(fill="#F0F8FF"),
     panel.background = element_blank(),
-    legend.position = "right",
     strip.text = element_markdown(family = "Roboto", margin = margin(b = 40), size = 20),
     strip.background = element_blank(),
-    plot.title = element_text(family = "Roboto Slab ExtraBold", size = 40, hjust = .5, margin=margin(b=20)),
+    plot.title = element_text(family = "Roboto Slab ExtraBold", size = 40, hjust = .5, margin=margin(b=20,t=30)),
     axis.title.y = element_blank(),
-    axis.title.x = element_text(family = "Roboto Light", size = 14, margin = margin(t = 15)),
-    plot.caption = element_markdown(hjust=.5,size = 10, color = "#696969"),
+    axis.title.x = element_text(family = "Roboto Light", size = 16, margin = margin(t = 15)),
+    plot.caption = element_markdown(hjust=.5,size = 14, color = "#696969"),
     plot.caption.position = "panel",
     legend.title = element_blank(),
-    legend.direction = "vertical",
-    legend.box.background = element_rect(fill = "#f0f0f0",size = 0),
+    legend.direction = "horizontal",
+    legend.background = element_blank(),
+    legend.box.background = element_blank(),
     legend.key.width = unit(50,"points"),
     legend.key = element_blank(),
     legend.box.just = "left",
+    legend.position = "bottom",
     legend.spacing = unit(10,"points"),
-    legend.text = element_text(family = "Roboto Condensed", size = 10)
+    legend.text = element_text(family = "Roboto Condensed", size = 15)
   ) + coord_flip()
 
 pyr
